@@ -1,0 +1,248 @@
+<!doctype html>
+<html>
+<head>
+  <title>Inboxer</title>
+  <meta charset="UTF-8">
+  <style>
+    html {
+      font-size: 14px; 
+    }
+    body { 
+      background: #eceff4; 
+      color: #2e3440;
+      font-family: Inter;
+    }
+    h1 {
+      font-weight: 900;
+      font-size: 3rem;
+      margin: 0 0 1rem;
+    }
+    .hidden{ display: none; }
+    .inbox-wrapper {
+      margin: 3rem auto;
+      max-width: 960px;
+    }
+    .inbox-wrapper .message[open] {
+      margin-bottom: .25rem;
+      margin-top: .25rem;
+      border-color: black; 
+    }
+    
+    .message { 
+      background: white; 
+      box-shadow: rgba(184, 194, 215, 0.25) 0px 4px 6px, rgba(184, 194, 215, 0.1) 0px 5px 7px;
+      border: solid 2px white;
+      overflow: auto; 
+      display: flex; 
+      align-items: center; 
+      transition: all ease-out .1s;
+    }
+    .message__header { 
+      display: flex; 
+      align-items: center; 
+      padding: .5rem 1rem;
+      flex: 1; 
+      position: sticky;
+      top: 0px;
+      background: white; 
+      user-select: none;
+      border-bottom: 1px solid #f1f1f1;
+    }
+    .message__header > div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .message__header__avatar { flex-basis: 5%; padding-right: .5rem; }
+    .message__header__avatar__icon {
+      border-radius: 100px;
+      display: block;
+      text-align: center; 
+      line-height: 2.6rem;
+      width: 36px;
+      height: 36px; 
+      font-weight: bold;
+      background: #FCCA75; 
+    }
+    .message__header__from { flex-basis: 15%; padding-right: .5rem; font-weight: bold;  }
+    .message__header__subject { flex-basis: 55%;  padding-right: .5rem; }
+    .message__header__subject__snippet { color: #888;}
+    .message__header__date { flex-basis: 17%; padding-right: .5rem; }
+    .message__header__actions { flex-basis: 8%; text-align: right; }
+    .message__header__actions button {
+      padding: .25rem .5rem;
+      background: 0;
+      background: #FCCA75;
+      border: 0;
+      border-radius: 4px;
+      font-size: .875rem;
+      opacity: .5;
+    }
+    .message__header__actions button:hover { opacity: 1; }
+    .message__header__actions button:active { opacity: .5; }
+    .message__body {
+      padding: 2rem;
+      max-width: 80%;
+      margin: 0 auto; 
+    }
+  </style>
+</head>
+<body>
+  <div class="inbox-wrapper">
+    <h1>Inbox</h1>
+
+    <button id="authorize-button" class="btn btn-primary hidden">Authorize</button>
+
+    <div class="inbox hidden">
+    </div>
+  </div>
+
+  <script
+  src="https://code.jquery.com/jquery-3.4.0.min.js"
+  integrity="sha256-BJeo0qm959uMBGb65z40ejJYGSgR7REI4+CW1fNKwOg="
+  crossorigin="anonymous"></script>
+
+
+  <script type="text/javascript">
+    var clientId = 'GOOGLE_API_CLIENT_ID';
+    var apiKey = 'GOOGLE_API_KEY';
+    var scopes = 'https://www.googleapis.com/auth/gmail.modify';
+
+    function handleClientLoad() {
+      gapi.client.setApiKey(apiKey);
+      window.setTimeout(checkAuth, 1);
+    }
+
+    function checkAuth() {
+      gapi.auth.authorize({
+        client_id: clientId,
+        scope: scopes,
+        immediate: true
+      }, handleAuthResult);
+    }
+
+    function handleAuthClick() {
+      gapi.auth.authorize({
+        client_id: clientId,
+        scope: scopes,
+        immediate: false
+      }, handleAuthResult);
+      return false;
+    }
+
+    function handleAuthResult(authResult) {
+      if(authResult && !authResult.error) {
+        loadGmailApi();
+        $('#authorize-button').remove();
+        $('.inbox').removeClass("hidden");
+      } else {
+        $('#authorize-button').removeClass("hidden");
+        $('#authorize-button').on('click', function(){
+          handleAuthClick();
+        });
+      }
+    }
+
+    function loadGmailApi() {
+      gapi.client.load('gmail', 'v1', displayInbox);
+    }
+
+    function displayInbox() {
+      var request = gapi.client.gmail.users.messages.list({
+        'userId': 'me',
+        'labelIds': 'INBOX'
+      });
+
+      request.execute(function(response) {
+        $.each(response.messages, function() {
+          var messageRequest = gapi.client.gmail.users.messages.get({
+            'userId': 'me',
+            'id': this.id
+          });
+
+          messageRequest.execute(appendMessageRow);
+        });
+      });
+    }
+
+    function appendMessageRow(message) {
+      $('.inbox').append(`
+
+        <details class="message message-${message.id}">
+        <summary class="message__header">
+          <div class="message__header__avatar"><span class="message__header__avatar__icon"></span></div>
+          <div class="message__header__from">${getHeader(message.payload.headers, 'From')}</div>
+          <div class="message__header__subject">${getHeader(message.payload.headers, 'Subject')} <span class="message__header__subject__snippet">&mdash; ${message.snippet}</span></div>
+          <div class="message__header__date">${getHeader(message.payload.headers, 'Date')}</div>
+          <div class="message__header__actions"><button onclick="archiveMesssage('${message.id}'); return false;">Done</button></div>
+        </summary>
+        <div class="message__body">${message.snippet}... </div>    
+        </details>
+
+        `
+        );
+    }
+
+      function archiveMesssage(messageId) {
+        modifyMessage('me', messageId, [], ["INBOX"])
+        $('.message-' + messageId).remove(); 
+      }
+
+      function modifyMessage(userId, messageId, labelsToAdd, labelsToRemove, callback) {
+        var request = gapi.client.gmail.users.messages.modify({
+          'userId': userId,
+          'id': messageId,
+          'addLabelIds': labelsToAdd,
+          'removeLabelIds': labelsToRemove
+        });
+        request.execute(function(response){
+          console.log(response)
+        });
+      }
+
+      function getHeader(headers, index) {
+        var header = '';
+
+        $.each(headers, function(){
+          if(this.name === index){
+            header = this.value;
+          }
+        });
+        return header;
+      }
+
+      function getBody(message) {
+        var encodedBody = '';
+        if(typeof message.parts === 'undefined')
+        {
+          encodedBody = message.body.data;
+        }
+        else
+        {
+          encodedBody = getHTMLPart(message.parts);
+        }
+        encodedBody = encodedBody.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
+        return decodeURIComponent(escape(window.atob(encodedBody)));
+      }
+
+      function getHTMLPart(arr) {
+        for(var x = 0; x <= arr.length; x++)
+        {
+          if(typeof arr[x].parts === 'undefined')
+          {
+            if(arr[x].mimeType === 'text/html')
+            {
+              return arr[x].body.data;
+            }
+          }
+          else
+          {
+            return getHTMLPart(arr[x].parts);
+          }
+        }
+        return '';
+      }
+    </script>
+    <script src="https://apis.google.com/js/client.js?onload=handleClientLoad"></script>
+  </body>
+  </html>
