@@ -1,8 +1,8 @@
 # Inboxer
 
-Clientside Google Inbox replacement. 
+Super alpha, non-functional clientside Google Inbox replacement. 
 
-`cd inboxer; 
+`cd inboxer;`
 
 `python -m SimpleHTTPServer 8000`
 
